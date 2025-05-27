@@ -63,6 +63,7 @@ class DriveLoader(BaseLoader):
         self.initial_category = category # Store the category passed during initialization
         self.embedding_model_type = embedding_model_type # Store it
         self.max_images_per_doc = max_images_per_doc
+        logger.info(f"DRIVE_LOADER_INIT: Item ID='{self.item_id}', Initial Category='{self.initial_category}', Embedding Model='{self.embedding_model_type}'") # MODIFIED: Added log
         self.processed_item_ids: Set[str] = set() # To prevent infinite loops with shortcuts or complex structures
         self.drive_service = None
         self.slides_service = None
@@ -137,7 +138,7 @@ class DriveLoader(BaseLoader):
 
         self.processed_item_ids.clear()
         # documents: List[Document] = [] # Removed list
-        logging.info(f"Starting to load from Drive item ID: {self.item_id}")
+        logging.info(f"Starting to load from Drive item ID: {self.item_id} using initial category: '{self.initial_category}'")
 
         try:
             item_metadata = self.drive_service.files().get(
@@ -149,15 +150,14 @@ class DriveLoader(BaseLoader):
             mime_type = item_metadata.get("mimeType")
 
             if mime_type == "application/vnd.google-apps.folder":
-                logging.info(f"Item {self.item_id} ('{item_metadata.get('name')}') is a folder. Processing folder contents.")
-                # Pass the initial category which might be None. _process_folder will handle category logic.
-                async for doc in self._process_folder(self.item_id, item_metadata.get('name'), self.initial_category, self.embedding_model_type): # Changed to async for and yield from
+                logging.info(f"Item {self.item_id} ('{item_metadata.get('name')}') is a folder. Processing folder contents using initial category '{self.initial_category}'.")
+                # Pass the initial category which will be used consistently. The folder_name is still useful for logging.
+                async for doc in self._process_folder(self.item_id, item_metadata.get('name'), self.initial_category, self.embedding_model_type): # MODIFIED: Pass self.initial_category
                     yield doc
             else:
-                logging.info(f"Item {self.item_id} ('{item_metadata.get('name')}') is a file. Processing as a single file.")
+                logging.info(f"Item {self.item_id} ('{item_metadata.get('name')}') is a file. Processing as a single file using initial category '{self.initial_category}'.") # MODIFIED
                 # For a single file, its category is the initial_category passed to the loader.
-                # Assuming _create_document_from_drive_item can be called directly. If it becomes async, this needs await.
-                doc = self._create_document_from_drive_item(item_metadata, self.initial_category, self.embedding_model_type)
+                doc = self._create_document_from_drive_item(item_metadata, self.initial_category, self.embedding_model_type) # MODIFIED: Pass self.initial_category
                 if doc:
                     yield doc # Changed to yield
         except HttpError as e:
@@ -179,28 +179,20 @@ class DriveLoader(BaseLoader):
             logger.error(f"Error fetching metadata for item {item_id}: {e}")
             return None, False
 
-    async def _process_folder(self, folder_id: str, folder_name: Optional[str], current_category: Optional[str], embedding_model_type: str) -> AsyncGenerator[Document, None]:
+    async def _process_folder(self, folder_id: str, folder_name: Optional[str], category_to_use: Optional[str], embedding_model_type: str) -> AsyncGenerator[Document, None]:
         """
         Recursively processes a folder's contents.
-        The category is determined by:
-        1. The current_category passed down (which could be from a parent or the initial category).
-        2. If the folder_name itself is a valid category (e.g., "Strategy", "Product Design"), it overrides.
-           This needs a mechanism to check if a folder name *is* a category,
-           perhaps by checking against a predefined list or a naming convention.
-           For now, let's assume folder names can act as categories.
+        The category used for documents will be self.initial_category.
+        The folder_name is used for logging and navigating structure.
         """
         if folder_id in self.processed_item_ids:
             logger.warning(f"Skipping already processed folder ID: {folder_id}")
             return # Use return for empty async generator
         self.processed_item_ids.add(folder_id)
 
-        # Determine effective category for items in this folder
-        # For simplicity, if folder_name is not None/empty, it's used as category.
-        # Otherwise, the current_category (from parent or initial) is used.
-        effective_category = folder_name if folder_name else current_category
-        # The embedding_model_type is passed down from the parent or initial call
-        # It does not change per sub-folder in this logic.
-        logger.info(f"Processing folder '{folder_name}' (ID: {folder_id}) with category: '{effective_category}', model_type: '{embedding_model_type}'")
+        # effective_category will be self.initial_category, passed as category_to_use
+        # The embedding_model_type is passed down from the parent or initial call.
+        logger.info(f"Processing folder '{folder_name}' (ID: {folder_id}). Documents within will use category: '{category_to_use}', model_type: '{embedding_model_type}'")
 
         # documents: List[Document] = [] # Removed list
         try:
@@ -240,12 +232,12 @@ class DriveLoader(BaseLoader):
                                 if target_mime_type == "application/vnd.google-apps.folder":
                                     # If shortcut target is a folder, process it.
                                     target_folder_name = target_metadata.get('name')
-                                    # Pass model type for shortcut to folder
-                                    async for doc_from_shortcut_folder in self._process_folder(target_id, target_folder_name, effective_category, embedding_model_type):
+                                    # Pass model type for shortcut to folder and the consistent category_to_use
+                                    async for doc_from_shortcut_folder in self._process_folder(target_id, target_folder_name, category_to_use, embedding_model_type):
                                         yield doc_from_shortcut_folder
                                 else:
                                     # If shortcut target is a file, create a document.
-                                    doc = self._create_document_from_drive_item(target_metadata, effective_category, embedding_model_type)
+                                    doc = self._create_document_from_drive_item(target_metadata, category_to_use, embedding_model_type)
                                     if doc:
                                         yield doc # Changed to yield
                                         self.processed_item_ids.add(target_id) # Mark target as processed
@@ -258,12 +250,12 @@ class DriveLoader(BaseLoader):
 
 
                     if item_mime_type == "application/vnd.google-apps.folder":
-                        # Pass model type to sub-folder processing
-                        async for doc_from_folder in self._process_folder(item_id_loop, item_name, effective_category, embedding_model_type): # Changed to async for and yield from
+                        # Pass model type to sub-folder processing and the consistent category_to_use
+                        async for doc_from_folder in self._process_folder(item_id_loop, item_name, category_to_use, embedding_model_type): # MODIFIED: Pass category_to_use
                             yield doc_from_folder
                     elif item_mime_type in self.SUPPORTED_MIME_TYPES or item_mime_type in self.EXPORT_MIMES:
-                        # Pass model type to file processing
-                        doc = self._create_document_from_drive_item(item, effective_category, embedding_model_type)
+                        # Pass model type to file processing and the consistent category_to_use
+                        doc = self._create_document_from_drive_item(item, category_to_use, embedding_model_type) # MODIFIED: Pass category_to_use
                         if doc:
                             yield doc # Changed to yield
                             self.processed_item_ids.add(item_id_loop) # Mark file as processed
@@ -355,6 +347,7 @@ class DriveLoader(BaseLoader):
                 logger.warning(f"No content or images extracted from file '{item_name}' (ID: {item_id}). Skipping document creation.")
                 return None
 
+            logger.info(f"DRIVE_LOADER_CREATE_DOC: Creating Document with ID='drive_{item_id}', Title='{item_name}', Category='{category}', ModelType='{embedding_model_type}'") # MODIFIED: Added log
             return Document(
                 id=f"drive_{item_id}",
                 title=item_name,
