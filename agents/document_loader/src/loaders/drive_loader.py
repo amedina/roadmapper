@@ -295,12 +295,12 @@ class DriveLoader(BaseLoader):
                 file_bytes = self._download_file_bytes(item_id, export_mime_type=(None if mime_type == "application/pdf" else "application/pdf") )
                 if file_bytes:
                     content, images = self._extract_text_and_images_from_pdf_bytes(file_bytes)
-            elif process_mime_type == "text/plain" or process_mime_type == "text/csv":
+            elif process_mime_type == "text/plain" or process_mime_type == "text/csv" or process_mime_type == "text/markdown":
                 # Determine if an export is needed for text content
                 text_export_mime = None
                 if mime_type in self.EXPORT_MIMES and self.EXPORT_MIMES[mime_type] == "text/plain": # e.g. GSlides to text
                     text_export_mime = "text/plain"
-                # if mime_type is already text/plain or text/csv, no export is needed (text_export_mime remains None)
+                # if mime_type is already text/plain or text/csv or text/markdown, no export is needed (text_export_mime remains None)
                 
                 file_bytes = self._download_file_bytes(item_id, export_mime_type=text_export_mime)
                 if file_bytes:

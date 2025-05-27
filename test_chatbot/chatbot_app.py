@@ -666,6 +666,7 @@ def get_user_friendly_document_type(original_mime_type: Optional[str]) -> str:
     if "vnd.google-apps.presentation" in original_mime_type: return "Google Slides"
     if "vnd.google-apps.spreadsheet" in original_mime_type: return "Google Sheet"
     if "pdf" in original_mime_type: return "PDF"
+    if original_mime_type == "text/markdown": return "Markdown File" # Handle Markdown
     if original_mime_type.startswith("text/"): return original_mime_type.split('/')[1].upper() + " File" # e.g. PLAIN File, CSV File
     if original_mime_type.startswith("image/"): return original_mime_type.split('/')[1].upper() + " Image" # e.g. JPEG Image
     # Fallback for other specific types you might add
@@ -810,7 +811,7 @@ async def get_chatbot_response(user_input, history):
         # Don't stop here, proceed to LLM with "No relevant context found."
 
     # Construct prompt for LLM
-    prompt_template = f"""You are a helpful AI assistant for the Roadmapper application.
+    prompt_template = f"""You are a helpful Product Manager assistant for a Google Product Manager.
 Your goal is to answer the user's question based on the provided context.
 Each piece of context will include: Document ID, Title, Source (e.g., Google Drive, GitHub), Type (e.g., Google Doc, PDF), Category, Source URL, and Content.
 
