@@ -1,5 +1,4 @@
-# One repository per line (owner/repo), optionally followed by a category.
-# Example: google/vertex-ai-samples CodeBase
-# Example: myorg/myrepo "Internal Tools"
+# One <owner/repo, Category, embedding-model> per line
+# Example: google/vertex-ai-samples CodeBase text 
 
-amedina/roadmapper-loader-test Tools
+amedina/roadmapper-loader-test Tools multimodal

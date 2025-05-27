@@ -2,6 +2,6 @@
 # Example: https://example.com Blog
 # Example: https://another.com/page "Research Papers"
 
-https://privacysandbox.google.com/ "Developer Docs"
-https://privacysandbox.com/ "Product Marketing"
+https://privacysandbox.google.com/ "Developer Docs" multimodal
+https://privacysandbox.com/ "Product Marketing" text
 
