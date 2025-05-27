@@ -163,8 +163,12 @@ class GitHubLoader(BaseLoader):
                                         # This whole block handles the download and error reporting for a single image URL
                                         try:
                                             loop = asyncio.get_running_loop()
-                                            # For Python 3.9+ you could use: response = await asyncio.to_thread(requests.get, absolute_url)
-                                            response = await loop.run_in_executor(None, lambda: requests.get(absolute_url, timeout=10)) # Added timeout
+                                            headers = {}
+                                            if self.token and absolute_url.startswith("https://github.com/"):
+                                                logger.debug(f"Adding Authorization header for GitHub URL: {absolute_url}")
+                                                headers['Authorization'] = f'token {self.token}'
+                                            
+                                            response = await loop.run_in_executor(None, lambda: requests.get(absolute_url, timeout=10, headers=headers))
                                             
                                             if response.status_code == 200:
                                                 images.append(response.content)
@@ -248,6 +252,10 @@ class GitHubLoader(BaseLoader):
                         else:
                             logger.debug(f"Skipping unsupported file in GitHub: {filename} (type: {file_content.type}, path: {file_content.path})")
                             continue
+
+                        # Guess MIME type
+                        guessed_mime_type, _ = mimetypes.guess_type(filename)
+
                         doc = Document(
                             id=file_content.sha, # Use SHA as a unique ID for the file version
                             title=file_content.name,
@@ -260,7 +268,8 @@ class GitHubLoader(BaseLoader):
                             metadata={
                                 'path': file_content.path,
                                 'sha': file_content.sha,
-                                'size': file_content.size
+                                'size': file_content.size,
+                                'original_mime_type': guessed_mime_type # Add guessed MIME type
                             }
                         )
                         yield doc
