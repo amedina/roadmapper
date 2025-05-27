@@ -133,8 +133,12 @@ async def initialize_document_pipeline():
     vector_search_manager = None
     
     try:
-        # 1. Initialize DataSourceLoader 
-        data_source_loader = DataSourceLoader(sources_dir="data/sources") 
+        # 1. Initialize DataSourceLoader
+        # Construct absolute path to the desired data sources directory
+        # project_root is defined at the top of the file
+        sources_dir_path = os.path.join(project_root, 'agents', 'document_loader', 'data', 'sources')
+        logger.info(f"DataSourceLoader will use sources_dir: {sources_dir_path}")
+        data_source_loader = DataSourceLoader(sources_dir=sources_dir_path) 
         logger.info("DataSourceLoader initialized successfully.")
 
         # 2. Initialize EmbeddingProcessors
@@ -301,6 +305,7 @@ async def populate_document_store_on_startup():
         for doc_idx, doc_obj in enumerate(all_loaded_documents): # Changed variable names for clarity
             if doc_obj and doc_obj.id:
                  document_store[doc_obj.id] = doc_obj
+                 logger.info(f"DOC_STORE_ADD_STARTUP: Added doc ID '{doc_obj.id}' with Title='{doc_obj.title}', Category='{doc_obj.category}' to document_store.")
             else:
                 logger.warning(f"Encountered a document with no ID during startup storing (index {doc_idx}): {doc_obj.metadata if doc_obj else 'None'}")
 
@@ -443,6 +448,7 @@ async def trigger_document_loading_and_indexing():
         for doc in all_loaded_documents:
             if doc and doc.id: # Ensure doc and doc.id are not None
                  document_store[doc.id] = doc
+                 logger.info(f"DOC_STORE_ADD_TRIGGER: Added/Updated doc ID '{doc.id}' with Title='{doc.title}', Category='{doc.category}' to document_store.")
             else:
                 logger.warning(f"Encountered a document with no ID during storing: {doc.metadata if doc else 'None'}")
 
@@ -642,6 +648,34 @@ async def perform_test_search():
         traceback.print_exc()
         return f"Error during test search: {e}"
 
+# --- Helper functions for formatting metadata ---
+def get_user_friendly_source_type(source_type: Optional[str]) -> str:
+    if not source_type: return "Unknown Source"
+    mapping = {
+        "google_drive": "Google Drive",
+        "github": "GitHub",
+        "web": "Web Page",
+        # Add more mappings as needed
+    }
+    return mapping.get(source_type.lower(), source_type.replace("_", " ").title())
+
+def get_user_friendly_document_type(original_mime_type: Optional[str]) -> str:
+    if not original_mime_type: return "Unknown Type"
+    # Simplified mapping, can be expanded
+    if "vnd.google-apps.document" in original_mime_type: return "Google Doc"
+    if "vnd.google-apps.presentation" in original_mime_type: return "Google Slides"
+    if "vnd.google-apps.spreadsheet" in original_mime_type: return "Google Sheet"
+    if "pdf" in original_mime_type: return "PDF"
+    if original_mime_type.startswith("text/"): return original_mime_type.split('/')[1].upper() + " File" # e.g. PLAIN File, CSV File
+    if original_mime_type.startswith("image/"): return original_mime_type.split('/')[1].upper() + " Image" # e.g. JPEG Image
+    # Fallback for other specific types you might add
+    mapping = {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word Document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint Presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel Spreadsheet",
+    }
+    return mapping.get(original_mime_type, "File") # Generic fallback
+
 # --- Chatbot Logic (to be expanded) ---
 # The primary role of get_chatbot_response is to process user input, 
 # augment it with relevant information retrieved from a document corpus 
@@ -738,9 +772,25 @@ async def get_chatbot_response(user_input, history):
                     doc_content = document_store[lookup_id].content
                     if doc_content:
                          doc_title = document_store[lookup_id].title or "N/A"
-                         doc_source_type = document_store[lookup_id].source_type or "N/A"
-                         logger.info(f"    Document ID '{lookup_id}' has content. Title: '{doc_title}', SourceType: '{doc_source_type}'. Length: {len(doc_content)} chars.")
-                         context_docs.append(f"Document ID: {lookup_id}\nTitle: {doc_title}\nSource Type: {doc_source_type}\nContent:\n{doc_content}\n---")
+                         raw_source_type = document_store[lookup_id].source_type
+                         raw_original_mime_type = document_store[lookup_id].metadata.get('original_mime_type')
+                         doc_category = document_store[lookup_id].category or "N/A"
+                         doc_source_url = document_store[lookup_id].source_url or "N/A"
+
+                         # Get user-friendly versions
+                         user_friendly_source = get_user_friendly_source_type(raw_source_type)
+                         user_friendly_type = get_user_friendly_document_type(raw_original_mime_type)
+
+                         logger.info(f"CHATBOT_CONTEXT_DOC_RETRIEVED: Doc ID(lookup)='{lookup_id}', Title='{doc_title}', Retrieved Category='{document_store[lookup_id].category}', UF Source='{user_friendly_source}', UF Type='{user_friendly_type}'")
+                         logger.info(f"    Document ID '{lookup_id}' has content. Title: '{doc_title}', UF Source: '{user_friendly_source}', UF Type: '{user_friendly_type}', Category: '{doc_category}', URL: '{doc_source_url}'. Length: {len(doc_content)} chars.")
+                         context_docs.append(
+                             f"Document ID: {lookup_id}\n" \
+                             f"Title: {doc_title}\n" \
+                             f"Source: {user_friendly_source}\n" \
+                             f"Type: {user_friendly_type}\n" \
+                             f"Category: {doc_category}\n" \
+                             f"Source URL: {doc_source_url}\n" \
+                             f"Content:\n{doc_content}\n---")
                     else:
                         logger.info(f"    Document ID '{lookup_id}' found in store but has NO content.")
                 else:
@@ -762,10 +812,17 @@ async def get_chatbot_response(user_input, history):
     # Construct prompt for LLM
     prompt_template = f"""You are a helpful AI assistant for the Roadmapper application.
 Your goal is to answer the user's question based on the provided context.
-The context will include a Document ID, Title, Source Type, and Content for each retrieved document.
+Each piece of context will include: Document ID, Title, Source (e.g., Google Drive, GitHub), Type (e.g., Google Doc, PDF), Category, Source URL, and Content.
+
 If the context is empty or not relevant to the question, try to answer the question based on your general knowledge,
 but clearly state that the information is not from the provided documents.
-If you use information from the context, please cite the Document ID(s) and optionally the title(s) that provided the information.
+
+When using information from the context, phrase your citation naturally like this example:
+"Based on my recollection (document: [{{Title}}, {{Source}}, {{Type}}, {{Category}}]), {{relevant information from the document content}}."
+
+- Focus on using the Title, Source, Type, and Category in your citation as shown in the example.
+- Do NOT explicitly state "Document ID" or "Source URL" in your user-facing answer unless the user specifically asks for it or it is the most natural way to refer to a web source. These are primarily for your reference if needed.
+- If a value for Title, Source, Type, or Category is "N/A" or "Unknown ...", you can omit that specific piece from your citation list for that document.
 
 Context:
 {context_string}

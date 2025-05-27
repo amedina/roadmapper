@@ -2,4 +2,4 @@
 # Example: google/vertex-ai-samples CodeBase
 # Example: myorg/myrepo "Internal Tools"
 
-amedina/roadmapper-loader-test Tools
+amedina/roadmapper-loader-test Tools multimodal

@@ -2,7 +2,6 @@
 # Example: 1abc...xyz StrategyDoc
 # Example: 2def...uvw "Product Design"
 
-19Zmwt5dFrdwOa-Ce6SVYB862-qgyABLk PRD
-19Zmwt5dFrdwOa-Ce6SVYB862-qgyABLk Strategy
-19Zmwt5dFrdwOa-Ce6SVYB862-qgyABLk Market
-1W-fv4izwdCAqUVOAhPFdlopb0535ByJu9UWT66nJBDY Unique
+
+1d889-YO5VACLBTc_ltdVx-XsF3M_6ULE AI multimodal
+1W-fv4izwdCAqUVOAhPFdlopb0535ByJu9UWT66nJBDY Local multimodal

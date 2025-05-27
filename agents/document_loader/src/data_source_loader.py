@@ -61,6 +61,7 @@ class DataSourceLoader:
                 logger.warning(f"Invalid model type '{model_type_str}' in line: '{line}'. Defaulting to '{self.default_model_type}'.")
         # If model_type_str is None, final_model_type remains self.default_model_type
 
+        logger.info(f"PARSED_LINE_DSL: Item='{item_name}', Category='{category}', ModelType='{final_model_type}' from raw line: '{line.strip()}'")
         return item_name, category, final_model_type
 
     def _load_file_content(self, file_path: Path) -> List[Tuple[str, Optional[str], str]]:
